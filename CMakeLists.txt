@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(oneko VERSION 1.0.0 LANGUAGES C CXX)
+project(oneko VERSION 1.0.0 LANGUAGES C)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 20)
@@ -29,7 +29,7 @@ target_include_directories(wayland-protocols PUBLIC
 
 # Add main executable
 add_executable(oneko
-    oneko.cc
+    oneko.c
 )
 
 # Link libraries
