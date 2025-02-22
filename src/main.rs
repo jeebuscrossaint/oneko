@@ -1,3 +1,7 @@
+mod cat;
+mod mouse;
+
 fn main() {
-    println!("Hello, world!");
+    println!("oneko!");
+    mouse::track_mouse();
 }
