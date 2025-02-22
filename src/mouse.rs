@@ -1,5 +1,9 @@
 use crate::cat::Cat;
-use std::time::{Duration, Instant};
+use crate::window::Window;
+use mouse_position::mouse_position::Mouse;
+use std::time::Instant;
+use winit::event::Event;
+use winit::event_loop::ControlFlow;
 
 #[cfg(target_os = "linux")]
 use std::process::Command;
@@ -7,15 +11,10 @@ use std::process::Command;
 #[cfg(target_os = "linux")]
 use winit::event::{Event, WindowEvent};
 #[cfg(target_os = "linux")]
-use winit::event_loop::{ControlFlow, EventLoop};
-#[cfg(target_os = "linux")]
-use winit::window::WindowBuilder;
-
-use mouse_position::mouse_position::Mouse;
+use winit::event_loop::ControlFlow;
 
 #[cfg(target_os = "linux")]
 fn is_wayland() -> bool {
-    // Check if we're running under Wayland by checking the XDG_SESSION_TYPE
     if let Ok(output) = Command::new("sh")
         .arg("-c")
         .arg("echo $XDG_SESSION_TYPE")
@@ -29,20 +28,24 @@ fn is_wayland() -> bool {
 }
 
 pub fn track_mouse() {
-    let mut cat = Cat::new(0.0, 0.0);
+    let (mut window, event_loop) = Window::new();
+
+    // Get the primary monitor and center position
+    let monitor = event_loop
+        .primary_monitor()
+        .expect("Failed to get primary monitor");
+    let size = monitor.size();
+    let center_x = (size.width / 2) as f64;
+    let center_y = (size.height / 2) as f64;
+
+    // Initialize cat at center
+    let mut cat = Cat::new(center_x, center_y);
     let mut last_update = Instant::now();
 
     #[cfg(target_os = "linux")]
     {
         if is_wayland() {
             println!("Running under Wayland");
-            let event_loop = EventLoop::new();
-            let window = WindowBuilder::new()
-                .with_title("oneko")
-                .with_inner_size(winit::dpi::LogicalSize::new(1, 1))
-                .build(&event_loop)
-                .unwrap();
-
             event_loop.run(move |event, _, control_flow| {
                 *control_flow = ControlFlow::Poll;
 
@@ -56,11 +59,14 @@ pub fn track_mouse() {
                         ..
                     } => {
                         cat.set_target(position.x, position.y);
+                        window.set_position((cat.x as i32) - 16, (cat.y as i32) - 16);
                     }
                     Event::MainEventsCleared => {
                         cat.update(delta_time);
-                        println!("Cat position: ({:.1}, {:.1})", cat.x, cat.y);
                         window.request_redraw();
+                    }
+                    Event::RedrawRequested(_) => {
+                        window.render(&cat);
                     }
                     _ => (),
                 }
@@ -68,44 +74,67 @@ pub fn track_mouse() {
         } else {
             // X11 implementation
             println!("Running under X11");
-            loop {
+            event_loop.run(move |event, _, control_flow| {
+                *control_flow = ControlFlow::Poll;
+
                 let now = Instant::now();
                 let delta_time = now - last_update;
                 last_update = now;
 
-                let position = Mouse::get_mouse_position();
-                match position {
-                    Mouse::Position { x, y } => {
-                        cat.set_target(x as f64, y as f64);
-                    }
-                    Mouse::Error => println!("Error getting mouse position"),
-                }
+                match event {
+                    Event::MainEventsCleared => {
+                        let position = Mouse::get_mouse_position();
+                        match position {
+                            Mouse::Position { x, y } => {
+                                cat.set_target(x as f64, y as f64);
+                            }
+                            Mouse::Error => println!("Error getting mouse position"),
+                        }
 
-                cat.update(delta_time);
-                println!("Cat position: ({:.1}, {:.1})", cat.x, cat.y);
-                std::thread::sleep(Duration::from_millis(16));
-            }
+                        cat.update(delta_time);
+                        window.request_redraw();
+                    }
+                    Event::RedrawRequested(_) => {
+                        window.render(&cat);
+                    }
+                    _ => (),
+                }
+            });
         }
     }
 
     #[cfg(not(target_os = "linux"))]
     {
-        loop {
+        event_loop.run(move |event, _, control_flow| {
+            *control_flow = ControlFlow::Poll;
+
             let now = Instant::now();
             let delta_time = now - last_update;
             last_update = now;
 
-            let position = Mouse::get_mouse_position();
-            match position {
-                Mouse::Position { x, y } => {
-                    cat.set_target(x as f64, y as f64);
-                }
-                Mouse::Error => println!("Error getting mouse position"),
-            }
+            match event {
+                Event::MainEventsCleared => {
+                    let position = Mouse::get_mouse_position();
+                    match position {
+                        Mouse::Position { x, y } => {
+                            cat.set_target(x as f64, y as f64);
+                            // Move window to follow cat
+                            window.set_position(
+                                (cat.x as i32) - 16, // Center horizontally
+                                (cat.y as i32) - 16, // Center vertically
+                            );
+                        }
+                        Mouse::Error => println!("Error getting mouse position"),
+                    }
 
-            cat.update(delta_time);
-            println!("Cat position: ({:.1}, {:.1})", cat.x, cat.y);
-            std::thread::sleep(Duration::from_millis(16));
-        }
+                    cat.update(delta_time);
+                    window.request_redraw();
+                }
+                Event::RedrawRequested(_) => {
+                    window.render(&cat);
+                }
+                _ => (),
+            }
+        });
     }
 }
