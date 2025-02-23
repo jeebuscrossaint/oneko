@@ -15,27 +15,24 @@ impl Window {
     pub fn new() -> (Self, EventLoop<()>) {
         let event_loop = EventLoop::new();
 
-        let monitor = event_loop
-            .primary_monitor()
-            .expect("Failed to get primary monitor");
-
-        let size = monitor.size();
-        let center = PhysicalPosition::new((size.width / 2) as i32, (size.height / 2) as i32);
-
-        let mut builder = WindowBuilder::new()
+        // Create window first with default position
+        let builder = WindowBuilder::new()
             .with_decorations(false)
             .with_transparent(true)
             .with_window_level(WindowLevel::AlwaysOnTop)
-            .with_inner_size(LogicalSize::new(32, 32))
-            .with_position(center);
+            .with_inner_size(LogicalSize::new(32, 32));
 
-        // Add Windows-specific functionality
         #[cfg(target_os = "windows")]
-        {
-            builder = builder.with_skip_taskbar(true);
-        }
+        let builder = builder.with_skip_taskbar(true);
 
         let window = builder.build(&event_loop).unwrap();
+
+        // Now try to center the window if we can get monitor info
+        if let Some(monitor) = event_loop.primary_monitor() {
+            let size = monitor.size();
+            let center = PhysicalPosition::new((size.width / 2) as i32, (size.height / 2) as i32);
+            window.set_outer_position(center);
+        }
 
         let size = window.inner_size();
         let surface_texture = SurfaceTexture::new(size.width, size.height, &window);
