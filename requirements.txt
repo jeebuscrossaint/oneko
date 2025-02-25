@@ -1,0 +1,5 @@
+# requirements.txt
+PyQt6>=6.4.0 # for the actual program lol
+Pillow>=10.0.0  # For icon conversion
+pyinstaller>=5.13.0  # For creating executable
+pywin32>=305 # for like windows stuff installer
