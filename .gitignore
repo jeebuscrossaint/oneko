@@ -1,3 +1,5 @@
-*.o
+build/
+dist/
+*.spec
 oneko.exe
 oneko/

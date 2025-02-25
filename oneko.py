@@ -6,10 +6,12 @@ from PyQt6.QtCore import Qt, QTimer, QPoint, QSize
 from PyQt6.QtGui import QMovie, QCursor, QIcon
 import os
 
+
 class OnekoWindow(QLabel):
     CHASING = 1
     IDLE = 2
     SURPRISED = 3
+    DIGGING = 4
 
     def __init__(self):
         super().__init__()
@@ -18,16 +20,16 @@ class OnekoWindow(QLabel):
         # Start at cursor position
         cursor_pos = QCursor.pos()
         self.move(cursor_pos.x() - self.SPRITE_SIZE // 2,
-                 cursor_pos.y() - self.SPRITE_SIZE // 2)
+                  cursor_pos.y() - self.SPRITE_SIZE // 2)
 
     def initUI(self):
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.Tool
-            | Qt.WindowType.WindowTransparentForInput  # Make window click-through
-            | Qt.WindowType.SubWindow # task bar visiblity
-            | Qt.WindowType.WindowDoesNotAcceptFocus # prevent focus issues
+            | Qt.WindowType.WindowTransparentForInput
+            | Qt.WindowType.SubWindow
+            | Qt.WindowType.WindowDoesNotAcceptFocus
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
@@ -35,10 +37,11 @@ class OnekoWindow(QLabel):
         # Constants
         self.SPRITE_SIZE = 32
         self.TRIGGER_DISTANCE = 64
-        self.CATCH_DISTANCE = 24  # Increased to stop further from cursor
+        self.CATCH_DISTANCE = 24
         self.OFFSET_X = -2
         self.OFFSET_Y = -3
         self.NEKO_SPEED = 12
+        self.DIG_TIMEOUT = 50  # ~5 seconds at 90ms intervals
 
         # State variables
         self.state = self.CHASING
@@ -49,10 +52,12 @@ class OnekoWindow(QLabel):
         self.idle_action_timer = 0
         self.current_idle_action = 'sit'
         self.idle_action_counter = 0
+        self.dig_timer = 0
+        self.dig_direction = None
 
         # Load animations
         self.loadAnimations()
-        self.setMovie(self.animations[24])  # Start with sitting animation
+        self.setMovie(self.animations[24])
         self.resize(self.SPRITE_SIZE, self.SPRITE_SIZE)
 
         # Timer for movement and state updates
@@ -111,6 +116,25 @@ class OnekoWindow(QLabel):
                 movie.start()
                 self.animations[i - 1] = movie
 
+    def is_cursor_on_screen(self):
+        cursor_pos = QCursor.pos()
+        screen = QApplication.primaryScreen().geometry()
+        return screen.contains(cursor_pos)
+
+    def get_screen_edge(self):
+        cursor_pos = QCursor.pos()
+        screen = QApplication.primaryScreen().geometry()
+
+        # Check which edge is closest
+        if cursor_pos.y() <= screen.top():
+            return "up", (16, 17)  # Animation frames for up digging
+        elif cursor_pos.y() >= screen.bottom():
+            return "down", (20, 21)  # Animation frames for down digging
+        elif cursor_pos.x() <= screen.left():
+            return "left", (22, 23)  # Animation frames for left digging
+        else:
+            return "right", (18, 19)  # Animation frames for right digging
+
     def update_state(self):
         cursor_pos = QCursor.pos()
         cat_pos = self.pos() + QPoint(self.SPRITE_SIZE // 2, self.SPRITE_SIZE // 2)
@@ -119,17 +143,26 @@ class OnekoWindow(QLabel):
         dy = cursor_pos.y() + self.OFFSET_Y - cat_pos.y()
         distance = math.sqrt(dx * dx + dy * dy)
 
+        # Check if cursor is off screen
+        if not self.is_cursor_on_screen():
+            if self.state != self.DIGGING:
+                self.state = self.DIGGING
+                self.dig_timer = 0
+                self.dig_direction, _ = self.get_screen_edge()
+            self.handle_digging()
+            return
+
         if distance < self.CATCH_DISTANCE:
             if self.state != self.IDLE:
                 self.state = self.IDLE
                 self.idle_timer = 0
                 self.current_idle_action = 'sit'
                 self.idle_action_counter = 0
-                self.setMovie(self.animations[24])  # Use sitting animation
+                self.setMovie(self.animations[24])
             self.handle_idle_animations()
             return
 
-        if self.state == self.IDLE and distance > self.TRIGGER_DISTANCE:
+        if (self.state == self.IDLE or self.state == self.DIGGING) and distance > self.TRIGGER_DISTANCE:
             self.state = self.SURPRISED
             self.setMovie(self.animations[31])
             self.last_update = 5
@@ -153,6 +186,20 @@ class OnekoWindow(QLabel):
                 self.current_frame = (self.current_frame + 1) % 2
                 self.set_direction_animation(degrees)
 
+    def handle_digging(self):
+        self.dig_timer += 1
+        _, frames = self.get_screen_edge()
+
+        # Animate digging
+        self.setMovie(self.animations[frames[self.dig_timer % 2]])
+
+        # Give up after timeout
+        if self.dig_timer >= self.DIG_TIMEOUT:
+            self.state = self.IDLE
+            self.idle_timer = 301  # Force sleep consideration
+            self.current_idle_action = 'sleep'
+            self.idle_action_counter = 0
+
     def handle_idle_animations(self):
         self.idle_timer += 1
 
@@ -163,12 +210,11 @@ class OnekoWindow(QLabel):
                 if random.random() < 0.15:
                     self.current_idle_action = 'wash'
                     self.idle_action_counter = 0
-                # 10% chance to start sleeping sequence if we've been idle for a while
-                elif self.idle_timer > 300 and random.random() < 0.1:
+                # Higher chance to sleep if we were just digging
+                elif self.idle_timer > 300 and random.random() < (0.5 if self.state == self.DIGGING else 0.1):
                     self.current_idle_action = 'sleep'
                     self.idle_action_counter = 0
             elif self.current_idle_action == 'wash':
-                # Stop washing after a while
                 if self.idle_action_counter > 30:
                     self.current_idle_action = 'sit'
                     self.idle_action_counter = 0
@@ -203,6 +249,7 @@ class OnekoWindow(QLabel):
             self.setMovie(self.animations[0 + self.current_frame])
         elif -67.5 < degrees <= -22.5:  # Up-Right
             self.setMovie(self.animations[2 + self.current_frame])
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
