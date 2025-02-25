@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import QApplication, QLabel, QSystemTrayIcon, QMenu
 from PyQt6.QtCore import Qt, QTimer, QPoint, QSize
 from PyQt6.QtGui import QMovie, QCursor, QIcon
 import os
+from pathlib import Path
 
 
 class OnekoWindow(QLabel):
@@ -85,6 +86,18 @@ class OnekoWindow(QLabel):
         self.toggle_action = self.tray_menu.addAction("Hide Kitty")
         self.toggle_action.triggered.connect(self.toggleVisibility)
 
+        # Add separator
+        self.tray_menu.addSeparator()
+
+        # Add autostart toggle
+        self.autostart_action = self.tray_menu.addAction("Start with Windows")
+        self.autostart_action.setCheckable(True)
+        self.autostart_action.setChecked(self.get_startup_path().exists())
+        self.autostart_action.triggered.connect(self.toggle_autostart)
+
+        # Add separator
+        self.tray_menu.addSeparator()
+
         # Add quit action
         quit_action = self.tray_menu.addAction("Quit")
         quit_action.triggered.connect(QApplication.instance().quit)
@@ -97,6 +110,31 @@ class OnekoWindow(QLabel):
 
         # Show the tray icon
         self.tray_icon.show()
+
+    def get_startup_path(self):
+        return Path(os.path.expandvars('%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\oneko.bat'))
+
+    def toggle_autostart(self):
+        startup_path = self.get_startup_path()
+        if self.autostart_action.isChecked():
+            try:
+                # If we're running from exe, use sys.executable
+                # Otherwise use the script path
+                exe_path = sys.executable if getattr(sys, 'frozen', False) else sys.argv[0]
+                with open(startup_path, 'w') as f:
+                    f.write(f'start "" "{exe_path}"')
+                self.tray_icon.showMessage("Oneko", "Will start with Windows")
+            except Exception as e:
+                self.autostart_action.setChecked(False)
+                self.tray_icon.showMessage("Oneko", "Failed to enable autostart")
+        else:
+            try:
+                if startup_path.exists():
+                    startup_path.unlink()
+                self.tray_icon.showMessage("Oneko", "Won't start with Windows")
+            except Exception as e:
+                self.autostart_action.setChecked(True)
+                self.tray_icon.showMessage("Oneko", "Failed to disable autostart")
 
     def toggleVisibility(self):
         if self.isVisible():
