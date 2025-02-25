@@ -18,9 +18,12 @@ def is_admin():
 def create_ico():
     print("Creating icon file...")
     try:
-        img = Image.open(os.path.join("gif", "25.GIF"))
+        img = Image.open(os.path.join("gif", "25.GIF"))  # Use sitting cat for icon
+        # Convert to RGBA if not already
         img = img.convert("RGBA")
-        img.save("oneko.ico")
+        # Create icon in multiple sizes for better display
+        icon_sizes = [(16,16), (24,24), (32,32), (48,48), (64,64), (128,128)]
+        img.save("oneko.ico", sizes=icon_sizes)
         print("Icon created successfully!")
         return True
     except Exception as e:
@@ -30,22 +33,32 @@ def create_ico():
 def build_exe():
     print("Building executable...")
     try:
+        # Clean up previous build
+        for path in ['build', 'dist']:
+            if os.path.exists(path):
+                shutil.rmtree(path)
+
         cmd = [
             "pyinstaller",
             "--onefile",
             "--noconsole",
-            "--add-data", "gif;gif",
+            "--add-data", f"gif{os.pathsep}gif",
+            "--add-data", f"oneko.ico{os.pathsep}.",  # Add ico file to root of bundle
             "--icon=oneko.ico",
             "oneko.py"
         ]
         subprocess.run(cmd, check=True)
+
+        # Verify the build
+        exe_path = os.path.join("dist", "oneko.exe")
+        if not os.path.exists(exe_path):
+            print("Error: Executable not created!")
+            return False
+
         print("\nBuild successful! Executable can be found in the 'dist' folder.")
         return True
-    except subprocess.CalledProcessError as e:
-        print(f"Error building executable: {e}")
-        return False
     except Exception as e:
-        print(f"Unexpected error: {e}")
+        print(f"Error building executable: {e}")
         return False
 
 def create_shortcut_in_startup(exe_path):

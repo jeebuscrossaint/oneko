@@ -58,7 +58,17 @@ class OnekoWindow(QLabel):
 
         # Load animations
         self.loadAnimations()
-        self.setMovie(self.animations[24])
+        # Find first available animation for initial state
+        initial_anim = None
+        for i in range(32):
+                if i in self.animations:
+                    initial_anim = self.animations[i]
+                    break
+
+        if initial_anim is None:
+                raise RuntimeError("No animations could be loaded!")
+
+        self.setMovie(initial_anim)
         self.resize(self.SPRITE_SIZE, self.SPRITE_SIZE)
 
         # Timer for movement and state updates
@@ -72,11 +82,18 @@ class OnekoWindow(QLabel):
         # Create the tray icon
         self.tray_icon = QSystemTrayIcon(self)
 
-        # Try to use one of the cat GIFs as the tray icon
-        icon_path = os.path.join("gif", "1.GIF")
+        # Use ico file for tray icon
+        if getattr(sys, 'frozen', False):
+            # If running as exe, use bundled path
+            icon_path = os.path.join(sys._MEIPASS, "oneko.ico")
+        else:
+            # If running from script
+            icon_path = "oneko.ico"
+
         if os.path.exists(icon_path):
             self.tray_icon.setIcon(QIcon(icon_path))
         else:
+            # Fallback to system icon
             self.tray_icon.setIcon(QIcon.fromTheme("applications-system"))
 
         # Create the tray menu
@@ -146,13 +163,33 @@ class OnekoWindow(QLabel):
 
     def loadAnimations(self):
         self.animations = {}
+
+        # Get the base path for resources
+        if getattr(sys, 'frozen', False):
+            # If we're running as a bundled exe
+            base_path = sys._MEIPASS
+        else:
+            # If we're running from script
+            base_path = os.path.abspath(os.path.dirname(__file__))
+
         for i in range(1, 33):
-            path = os.path.join("gif", f"{i}.GIF")
+            gif_name = f"{i}.GIF"
+            path = os.path.join(base_path, "gif", gif_name)
+
             if os.path.exists(path):
-                movie = QMovie(path)
-                movie.setScaledSize(QSize(self.SPRITE_SIZE, self.SPRITE_SIZE))
-                movie.start()
-                self.animations[i - 1] = movie
+                try:
+                    movie = QMovie(path)
+                    movie.setScaledSize(QSize(self.SPRITE_SIZE, self.SPRITE_SIZE))
+                    movie.start()
+                    self.animations[i - 1] = movie
+                except Exception as e:
+                    print(f"Error loading animation {i}: {e}")
+            else:
+                print(f"Missing animation file: {path}")
+
+        # Verify all animations loaded
+        if len(self.animations) != 32:
+            print(f"Warning: Only loaded {len(self.animations)} animations out of 32")
 
     def is_cursor_on_screen(self):
         cursor_pos = QCursor.pos()
