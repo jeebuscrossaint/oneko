@@ -26,6 +26,8 @@ class OnekoWindow(QLabel):
             | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.Tool
             | Qt.WindowType.WindowTransparentForInput  # Make window click-through
+            | Qt.WindowType.SubWindow # task bar visiblity
+            | Qt.WindowType.WindowDoesNotAcceptFocus # prevent focus issues
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
